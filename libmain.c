@@ -5,16 +5,20 @@
 //mInLoadOrder[n] -> mInLoadOrder[n+1]
 
 #if __SIZEOF_POINTER__ == 4
+
 #define PEB_LTR_OFFSET 0x0c
+#define LTR_LIST_OFFSET 0x0c
+#define LTR_ENTRY_NAME_OFFSET 0x2c
+
 #else
+
 #define PEB_LTR_OFFSET 0x18
+#define LTR_LIST_OFFSET 0x10
+#define LTR_ENTRY_NAME_OFFSET 0x58
+
 #endif
 
-#if __SIZEOF_POINTER__ == 4
-#define LTR_LIST_OFFSET 0x0c
-#else
-#define LTR_LIST_OFFSET 0x10
-#endif
+#define USTRING_BUFFER_OFFSET 4
 
 extern void *get_peb()
 
@@ -23,11 +27,10 @@ void *get_mTable() {
     p = ((char *) p) + PEB_LTR_OFFSET;
     p = *((void **) p);
     p = ((char *) p) + LTR_LIST_OFFSET;
-    p = *((void **) p);
     return p;
 }
 
-unsigned long hash(char *data, unsigned int len) { //http://www.cse.yorku.ca/~oz/hash.html
+unsigned long hashBuffer(char *data, unsigned int len) { //http://www.cse.yorku.ca/~oz/hash.html
     unsigned long h = 5381;
     for (unsigned int i = 0; i < len; i++) {
         h = ((h << 5) + h) ^ data[i];
@@ -35,6 +38,20 @@ unsigned long hash(char *data, unsigned int len) { //http://www.cse.yorku.ca/~oz
     return h;
 }
 
+unsigned long hashUString(void *data) {
+    return hashBuffer(((char *) data) + USTRING_BUFFER_OFFSET, *((unsigned short *) data));
+}
+
 void *getModule(unsigned long hash) {
     void *mt = get_mTable();
-    mt
+    void *head = mt;
+    while (1) {
+        mt = *((void **) mt);
+        if (mt == head) break
+        if (hash == hashUString(((char *) mt) + LTR_ENTRY_NAME_OFFSET)) {
+            return mt;
+        }
+    }
+    return NULL;
+}
+
