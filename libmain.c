@@ -54,4 +54,3 @@ void *getModule(unsigned long hash) {
     }
     return NULL;
 }
-
