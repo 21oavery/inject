@@ -6,27 +6,36 @@
 
 #if __SIZEOF_POINTER__ == 4
 
-#define PEB_LTR_OFFSET 0x0c
-#define LTR_LIST_OFFSET 0x0c
-#define LTR_ENTRY_NAME_OFFSET 0x2c
+#define PEB_LTR_OFFSET 12
+#define LTR_LIST_OFFSET 12
+#define LTR_ENTRY_NAME_OFFSET 44
+#define OPT_DATADIR_OFFSET 96
 
 #else
 
-#define PEB_LTR_OFFSET 0x18
-#define LTR_LIST_OFFSET 0x10
-#define LTR_ENTRY_NAME_OFFSET 0x58
+#define PEB_LTR_OFFSET 24
+#define LTR_LIST_OFFSET 16
+#define LTR_ENTRY_NAME_OFFSET 88
+#define OPT_DATADIR_OFFSET 112
 
 #endif
 
 #define USTRING_BUFFER_OFFSET 4
+#define DOS_PE_OFFSET 60
+#define PE_OPT_OFFSET 20
+#define PE_DATADIR_OFFSET (PE_OPT_OFFSET + OPT_DATADIR_OFFSET)
+
+#define deref(x) (*((void **) (x)))
+#define offset(x, y) (((char *) (x)) + (y))
+#define doffset(x, y) deref(offset(x, y))
+#define droffset(x, y) offset(x, *((unsigned long *) offset(x, y)))
 
 extern void *get_peb()
 
 void *get_mTable() {
     void *p = get_peb();
-    p = ((char *) p) + PEB_LTR_OFFSET;
-    p = *((void **) p);
-    p = ((char *) p) + LTR_LIST_OFFSET;
+    p = doffset(p, PEB_LTR_OFFSET);
+    p = offset(p, LTR_LIST_OFFSET);
     return p;
 }
 
@@ -39,7 +48,7 @@ unsigned long hashBuffer(char *data, unsigned int len) { //http://www.cse.yorku.
 }
 
 unsigned long hashUString(void *data) {
-    return hashBuffer(((char *) data) + USTRING_BUFFER_OFFSET, *((unsigned short *) data));
+    return hashBuffer(offset(data, USTRING_BUFFER_OFFSET), *((unsigned short *) data));
 }
 
 void *getModule(unsigned long hash) {
@@ -48,9 +57,62 @@ void *getModule(unsigned long hash) {
     while (1) {
         mt = *((void **) mt);
         if (mt == head) break
-        if (hash == hashUString(((char *) mt) + LTR_ENTRY_NAME_OFFSET)) {
+        if (hash == hashUString(offset(mt, LTR_ENTRY_NAME_OFFSET))) {
             return mt;
         }
     }
     return NULL;
 }
+
+void *getDataDir(void *mod) {
+    return offset(doffset(mod, DOS_PE_OFFSET), PE_DATADIR_OFFSET);
+}
+
+char strCmpCustom(char *a, char *b) { // 0 - equal, 1 - first is higher, 2 - second is higher
+    while (1) {
+        if (*a < *b) return 1;
+        if (*a > *b) return 2;
+        if (*a == *b) {
+            if (*a == 0) return 0;
+            a++;
+            b++;
+        }
+    }
+}
+
+#define ETABLE_OBASE_OFFSET 16
+#define ETABLE_NUMFUNCTS_OFFSET 20
+#define ETABLE_NUMNAMES_OFFSET 24
+#define ETABLE_ADDRFUNCT_OFFSET 28
+#define ETABLE_ADDRNAME_OFFSET 32
+#define ETABLE_ADDRONAME_OFFSET 36
+
+unsigned long getFunctionOrdinal(void *mod, char *name) {
+    void *e = getDataDir(mod);
+    unsigned long eSize = ((long *) e)[1];
+    e = offset(e, *((long *) e));
+    char *s;
+    unsigned long start = 0;
+    unsigned long end;
+    if ((end = (*((long *) offset(e, ETABLE_NUMNAMES_OFFSET)))) == 0) return NULL;
+    end--;
+    unsigned long temp;
+    char r;
+    while (start != end) {
+        temp = (end - start) / 2 + start;
+        switch (strCmpCustom(name, ((char **) droffset(e, ETABLE_ADDRNAME_OFFSET))[temp])) {
+            case 0:
+                return ((long *) droffset(e, ETABLE_ADDRONAME_OFFSET))[temp];
+            case 1:
+                end = temp - 1;
+                break;
+            case 2:
+                start = temp + 1;
+                break;
+        }
+    }
+    if (strCmpCustom(name, ((char **) droffset(e, ETABLE_ADDRNAME_OFFSET))[start]) == 0) return ((long *) droffset(e, ETABLE_ADDRONAME_OFFSET))[start];
+    else return NULL;
+}
+
+unsigned long getFunction()
