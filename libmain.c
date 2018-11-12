@@ -28,7 +28,9 @@
 #define deref(x) (*((void **) (x)))
 #define offset(x, y) (((char *) (x)) + (y))
 #define doffset(x, y) deref(offset(x, y))
-#define droffset(x, y) offset(x, *((unsigned long *) offset(x, y)))
+#define droffset(b, x, y) offset(b, *((unsigned long *) offset(x, y)))
+#define pullul(x) (*((unsigned long *) (x)))
+#define pullulo(x, y) pullul(((char *) (x)) + (y))
 
 extern void *get_peb()
 
@@ -82,27 +84,29 @@ char strCmpCustom(char *a, char *b) { // 0 - equal, 1 - first is higher, 2 - sec
 
 #define ETABLE_OBASE_OFFSET 16
 #define ETABLE_NUMFUNCTS_OFFSET 20
+#define getNumFuncts(x) pullulo(x, ETABLE_NUMFUNCTS_OFFSET)
 #define ETABLE_NUMNAMES_OFFSET 24
+#define getNumNames(x) pullulo(x, ETABLE_NUMNAMES_OFFSET)
 #define ETABLE_ADDRFUNCT_OFFSET 28
 #define ETABLE_ADDRNAME_OFFSET 32
 #define ETABLE_ADDRONAME_OFFSET 36
 
 unsigned long getFunctionOrdinal(void *mod, char *name) {
     void *e = getDataDir(mod);
-    unsigned long eSize = ((long *) e)[1];
-    e = offset(e, *((long *) e));
+    //unsigned long eSize = ((unsigned long *) e)[1];
+    e = offset(mod, pullul(e));
     char *s;
     unsigned long start = 0;
     unsigned long end;
-    if ((end = (*((long *) offset(e, ETABLE_NUMNAMES_OFFSET)))) == 0) return NULL;
+    if ((end = getNumNames(e)) == 0) return NULL;
     end--;
     unsigned long temp;
     char r;
     while (start != end) {
         temp = (end - start) / 2 + start;
-        switch (strCmpCustom(name, ((char **) droffset(e, ETABLE_ADDRNAME_OFFSET))[temp])) {
+        switch (strCmpCustom(name, ((char **) droffset(mod, e, ETABLE_ADDRNAME_OFFSET))[temp])) {
             case 0:
-                return ((long *) droffset(e, ETABLE_ADDRONAME_OFFSET))[temp];
+                return ((unsigned long *) droffset(mod, e, ETABLE_ADDRONAME_OFFSET))[temp];
             case 1:
                 end = temp - 1;
                 break;
@@ -111,8 +115,15 @@ unsigned long getFunctionOrdinal(void *mod, char *name) {
                 break;
         }
     }
-    if (strCmpCustom(name, ((char **) droffset(e, ETABLE_ADDRNAME_OFFSET))[start]) == 0) return ((long *) droffset(e, ETABLE_ADDRONAME_OFFSET))[start];
+    if (strCmpCustom(name, ((char **) droffset(mod, e, ETABLE_ADDRNAME_OFFSET))[start]) == 0) return ((unsigned long *) droffset(mod, e, ETABLE_ADDRONAME_OFFSET))[start];
     else return NULL;
 }
 
-unsigned long getFunction()
+void *getFunction(void *mod, unsigned long ordinal) {
+    ordinal -= *((unsigned long *) offset(e, ETABLE_OBASE_OFFSET));
+    void *e = getDataDir(mod);
+    unsigned long eSize = ((unsigned long *) e)[1];
+    e = droffset(mod, e, 0);
+    if (ordinal >= *((unsigned long *) offset(e, ETABLE_NUMFUNCTS_OFFSET))) return NULL;
+    void *f = droffset(mod, e, ETABLE_ADDRFUNCT_OFFSET);
+    if ((f < mod))
