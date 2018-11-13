@@ -32,7 +32,21 @@
 #define pullul(x) (*((unsigned long *) (x)))
 #define pullulo(x, y) pullul(((char *) (x)) + (y))
 
-extern void *get_peb()
+void *get_peb() {
+    void *p;
+    __asm__ volatile (
+        "mov 3, %%eax;
+#if __SIZEOF_POINTER__ == 4
+        mulb 16;
+        mov %%fs:0(%%al), %%eax;"
+#else
+        mulb 32;
+        mov %%gs:0(%%al), %%rax;"
+#endif
+        : "=a" (p)
+    );
+    return p;
+}
 
 void *get_mTable() {
     void *p = get_peb();
