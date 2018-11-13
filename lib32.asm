@@ -10,20 +10,3 @@ pop eax
 push [eax+30h]
 pop eax
 ret
-
-get_mTable:
-call get_peb
-add eax, 4
-add eax, 9
-push [eax]
-pop eax
-add eax, 11
-push [eax+2]
-pop eax
-ret
-
-hs:
-push ebx
-mov eax, 5381
-hs_i:
-mov
