@@ -53,7 +53,7 @@ unsigned long hashUString(void *data) {
     return hashBuffer(offset(data, USTRING_BUFFER_OFFSET), *((unsigned short *) data));
 }
 
-void *getModule(unsigned long hash) {
+void *getModule(unsigned long hash) { // Won't load a new module
     void *mt = get_mTable();
     void *head = mt;
     while (1) {
@@ -119,11 +119,13 @@ unsigned long getFunctionOrdinal(void *mod, char *name) {
     else return NULL;
 }
 
-void *getFunction(void *mod, unsigned long ordinal) {
+void *getFunction(void *mod, unsigned long ordinal) { // Won't follow forwarded exports
     ordinal -= *((unsigned long *) offset(e, ETABLE_OBASE_OFFSET));
     void *e = getDataDir(mod);
-    unsigned long eSize = ((unsigned long *) e)[1];
+    void *eLast = ((char *) e) + ((unsigned long *) e)[1] - 1;
     e = droffset(mod, e, 0);
     if (ordinal >= *((unsigned long *) offset(e, ETABLE_NUMFUNCTS_OFFSET))) return NULL;
     void *f = droffset(mod, e, ETABLE_ADDRFUNCT_OFFSET);
-    if ((f < mod))
+    if ((f < e) || (f > eLast)) return f;
+    return NULL;
+}
